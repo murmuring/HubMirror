@@ -14,8 +14,7 @@ public class Mirror extends PApplet {
 	/**
 	 * 
 	 */
-	
-	//PFrame settingsW= new PFrame(this,100,100,300,200);
+
 	
 	private static final long serialVersionUID = 1L;
 	
@@ -46,8 +45,6 @@ public class Mirror extends PApplet {
 
 
 	public boolean colorMode = true; // true=RGB, false=HSB // accessible from outside
-//	private float r, g, b; // color value in RGB space
-//	private float h_, s_, b_; // color values in HSB space
 	private float d; // distance for color detection		
 	public int limit = 20; // sensitivity limit for color detection // accessible from outside
 
@@ -687,7 +684,7 @@ public class Mirror extends PApplet {
 					+ limit);
 			println("+ : increase color distance for positive color detection (limit)");
 		}
-		// settingsW.settingsWindow.redraw();
+
 	}
 
 	private void resetDetectMap() {
@@ -725,8 +722,6 @@ public class Mirror extends PApplet {
 		int loc = mouseX + mouseY * width;
 		trackColor = pixels[loc];
 		flock.killAll();
-
-		//settingsW.settingsWindow.redraw();
 		
 		println("trackColor=" + (red(trackColor)) + "," + (green(trackColor))
 				+ "," + (blue(trackColor)));
