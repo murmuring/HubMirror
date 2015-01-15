@@ -1,22 +1,25 @@
 import java.util.Random;
+import java.awt.Frame;
+import java.awt.BorderLayout;
 
+import controlP5.*;
 import processing.core.*;
 import processing.video.*;
 
-import java.awt.Frame;
-import java.awt.BorderLayout;
-import controlP5.*;
-
-
-
 
 public class Mirror extends PApplet {
-	/**
-	 * 
-	 */
-
 	
 	private static final long serialVersionUID = 1L;
+	
+    public static void main(String[] args) { 
+
+        PApplet.main(new String[]{"--location=250,10",Mirror.class.getName() });
+    }
+	
+// declare second window objects
+	public ControlP5 settingsCP5;
+	ControlFrame settingsFrame;
+	
 	
 	public static int videoScale = 32; // size of detection squares
 
@@ -42,8 +45,6 @@ public class Mirror extends PApplet {
 	public int debugToggle = 0;
 	public boolean gridToggle = false;
 
-
-
 	public boolean colorMode = true; // true=RGB, false=HSB // accessible from outside
 	private float d; // distance for color detection		
 	public int limit = 20; // sensitivity limit for color detection // accessible from outside
@@ -55,10 +56,11 @@ public class Mirror extends PApplet {
 
 	// for flocking mode
 	public Flock flock;
+	public int flockSize = 50;
 
 	// for pong modes
-	public float originalBallSpeed = 5;			// accessible from outside
-	private float ballSpeed = originalBallSpeed;
+	public float originalBallSpeed = 10;			// accessible from outside
+	private float ballSpeed = 10;
 	public float ballSize = 20;					// accessible from outside
 	private float dirX, dirY;
 	private float ballX, ballY;
@@ -77,18 +79,19 @@ public class Mirror extends PApplet {
 	private float frameCount;
 
 
-
-
 	public void setup() {
 
 		size(1280, 960,P2D); // logitech 1280,960 // creative 1280,720
 		// get camera list and print to console
 		
-		colorMode(HSB, 360, 100, 100, 100);
-		
+		colorMode(HSB, 360, 100, 100, 100);		
 		blankColor=color(0,0,10,90);
 		
+		// declare second window objects
+		settingsFrame = addControlFrame("settings", 200,600);
+
 		
+// put all the camera's connected to the computer in an array,
 		String[] cameras = Capture.list();
 		if (cameras.length == 
 				0) {
@@ -100,27 +103,25 @@ public class Mirror extends PApplet {
 				println(cameras[i]);
 			}
 		}
-
-		
+	
 		// Initialize detection map and flock
 		resetDetectMap();
 
-		// start the video capturing
+		// start the video capturing on one of the camera's in teh array
 		video = new Capture(this, cameras[0]);
-
 		video.start();
-
-		trackColor = color(255, 221, 0);
+		// set the color tracking to track Magenta in RGB
+		trackColor = color(255, 0, 255);
 	}
 
 	public void draw() {
 		
 		rateTrack+= frameRate;
 		frameCount ++;
-		
 		if (frameCount >9){
 			rateTrack=rateTrack/frameCount;
-			println(rateTrack);
+			println(frameRate);
+			// println(rateTrack);
 			frameCount=0;
 		}
 		
@@ -244,389 +245,424 @@ public class Mirror extends PApplet {
 
 		switch (displayMode) {
 		case squares:
-
+      // nothing special ,cause grid can be displayed with 'g' key
 
 			break;
 		case dots:
 			// circles size depends on trackCount
 			// iterate through detectMap
-			for (int i = 0; i < (cols * rows); i++) {
-				// draw circles, size depends on detection count, gridsize and lifecount
-				if (detectMap[i].life > 10) {
-					stroke(detectMap[i].pointColor);
-
-					fill(trackColor, 100);
-
-					float cSize = map((detectMap[i].life * detectMap[i].count),
-							0, (videoScale * videoScale * lifeSpan), 0,
-							videoScale);
-					ellipse(detectMap[i].x + videoScale / 2, detectMap[i].y
-							+ videoScale / 2, cSize, cSize);
-				}
-			}
+			dotsHandler();
 			break;
 		case swarm:
 			// generates a swarm of boids, new boid in a specific grid point
 			// only after lifetime has elapsed
-			for (int i = 0; i < (cols * rows); i++) {
-				// Boids generation
-				if (detectMap[i].bump) {
-					flock.addBoid(new Boid(this, detectMap[i].x +videoScale/2,
-							detectMap[i].y+ +videoScale/2, detectMap[i].life,
-							detectMap[i].count / videoScale,
-							detectMap[i].pointColor));
-					detectMap[i].bump = false;
-				}
-			}
-
-			// run the flock simply attracted by itself
-			// flock.run();
-			
-			// run the flock, attracted by mouse
-			//flock.runMouse(new PVector(mouseX, mouseY));
-			
-// run the flock based on grid attraction
-			 flock.runGrid(detectMap);
+			swarmHandler();
 
 			break;
 
 		case simplePong:
 			// automatic ball, bat position depends on number of detected grid
 			// points in half the screen.
-
-			rectMode(CENTER);
-			// count number of detection boxes in the right side of the screen
-			rightCount = 0;
-			for (int c = (cols / 2); c < cols; c++) {
-				for (int r = 0; r < rows; r++) {
-					if (detectMap[c * rows + r].life > 98) {
-						rightCount++;
-					}
-				}
-			}
-			rightBatY = map(rightCount, 0, (cols * rows) / 3, 0, height);
-
-			// draw a 10 x 80 rectangle 10 pixels away from the right of the
-			// screen, in a position relative to the number of gridboxes in the
-			// right half of the screen
-			stroke(trackColor,100);
-			fill(trackColor,70);
-			
-			rightBatY=mouseY;
-			rect(width - 10, rightBatY, 10, 80);
-
-			// count number of detection boxes in the left side of the screen
-			leftCount = 0;
-			for (int c = 0; c < (cols / 2); c++) {
-				for (int r = 0; r < rows; r++) {
-					if (detectMap[c * rows + r].life > 98) {
-						leftCount++;
-					}
-				}
-			}
-			leftBatY = map(leftCount, 0, (cols * rows) / 3, 0, height);
-			// draw a 10 x 80 rectangle 10 pixels away from the left of the
-			// screen, in a position relative to the number of gridboxes in the
-			// left half of the screen
-			leftBatY=mouseY;
-			rect(10, leftBatY, 10, 80);
-
-
-			// display score
-			fill(trackColor);
-			textSize(40);
-			text((int)scoreL + " - " + (int)scoreR, (width / 2) - 40, 60);
-
-			if (scored > 0) {
-				if (scoreDelay > 0) {
-					fill(trackColor);
-					textSize(40);
-
-					text("SCORED", scored * (width / 3) - 50, (height / 2) + 20);
-					scoreDelay--;
-				} else {
-					scored = 0;
-				}
-			} else {
-
-				// update ball position
-				ballY += dirY;
-				ballX += dirX;
-				// create the ball
-				fill(trackColor);
-				rect(ballX, ballY, ballSize, ballSize);
-
-				// bounce off the top and bottom walls
-				if (ballY >= height-(ballSize/2)) {
-					dirY = -dirY;
-					dirX*=bounceFactor;
-					dirY*=bounceFactor;
-					
-					ballY = height-(ballSize/2);
-				}
-				if (ballY <= ballSize/2) {
-					dirY = -dirY;
-					dirX*=bounceFactor;
-					dirY*=bounceFactor;
-					
-					ballY = ballSize/2;
-				}
-
-				// bounce of the left Bat
-				if (ballX <= ballSize && ballY <= (leftBatY + 40) && ballY >= leftBatY - 40) {
-					// if its less than center make it go upwards
-					if (ballY < leftBatY) {
-						dirX = -dirX;
-						dirY = -dirY;
-					}
-					// if its more than center make it go downwards
-					if (ballY > leftBatY) {
-						dirX = -dirX;
-						dirY = +dirY;
-					}
-					// if its dead on make it shoot dead on
-					if (ballY == leftBatY) {
-						dirX = -dirY;
-						dirY = 0;
-					}
-					dirX*=bounceFactor;
-					dirY*=bounceFactor;
-				}
-				// bounce off the right Bat
-				if (ballX >= width - ballSize && ballY <= rightBatY + 40
-						&& ballY >= rightBatY - 40) {
-					// if its less than center make it go upwards
-					if (ballY < rightBatY) {
-						dirX = -dirX;
-						dirY = -dirY;
-					}
-					// if its more than center make it go downwards
-					if (ballY > rightBatY) {
-						dirX = -dirX;
-						dirY = +dirY;
-					}
-					// if its dead on make it shoot dead on
-					if (ballY == rightBatY) {
-						dirX = -dirX;
-						dirY = 0;
-					}
-					dirX*=bounceFactor;
-					dirY*=bounceFactor;
-				}
-				// account for score
-				if (ballX < 0) {
-					// if the left paddle doesn't hit the ball then add one to
-					// the right players score
-					scoreR++;
-
-					ballX = width / 2;
-					ballY = height / 2;
-					scored = 2;
-					scoreDelay = scoreTime;
-
-				}
-				if (ballX > width) {
-					// if the right paddle doesn't hit the ball then add one to
-					// the left players score
-					scoreL++;
-
-					ballX = width / 2;
-					ballY = height / 2;
-					scored = 1;
-					scoreDelay = scoreTime;
-
-				}
-			}
-
-			// set rectangle mode back to default
-			rectMode(CORNER);
+			simplePongHandler();
 			break;
 
 		case halfPong:
 			// automatic ball, bounces off any detected grid
 			// display score
-			fill(trackColor);
-			textSize(40);
-			text((int)scoreL + " - " + (int)scoreR, (width / 2) - 40, 60);
-
-			if (scored > 0) {
-				if (scoreDelay > 0) {
-					fill(trackColor);
-					textSize(40);
-
-					text("SCORED", scored * (width / 3) - 50, (height / 2) + 20);
-					scoreDelay--;
-				} else {
-					scored = 0;
-					ballX = width / 2;
-					ballY = height / 2;
-					dirX*=bounceFactor*bounceFactor;
-					dirY*=bounceFactor*bounceFactor;
-				}
-			} else {
-
-				
-				// update ball position
-				ballY += dirY;
-				ballX += dirX;
-				// create the ball
-				rectMode(CENTER);
-				fill(trackColor);
-				rect(ballX, ballY, ballSize, ballSize);
-
-				// account for score
-				if (ballX <= 0) {
-					// if the the ball exits left then add one to the right score
-					// players score
-					scoreR++;
-					scored = 2;
-					scoreDelay = scoreTime;
-					// limit x values (for other checkings)
-					ballX=0;
-				}
-				if (ballX >= width) {
-					// if the the ball exits right then add one to the left score
-					// players score
-					scoreL++;
-					scored = 1;
-					scoreDelay = scoreTime;
-					// limit x values (for other checkings)
-					ballX=width-1;
-				}				
-				
-				// bounce off the top and bottom walls
-				if (ballY >= height-(ballSize/2)) {
-					dirY = -dirY;
-					dirX*=bounceFactor;
-					dirY*=bounceFactor;
-					
-					ballY = height-(ballSize/2);
-				}
-				if (ballY <= ballSize/2) {
-					dirY = -dirY;
-					dirX*=bounceFactor;
-					dirY*=bounceFactor;
-					
-					ballY = ballSize/2;
-				}
-
-				// check grid detection collisions
-				// calculate grid position of ball
-				ballCol = (int)ballX / videoScale;
-				ballRow = (int)ballY / videoScale;
-				ballPos = (ballCol * rows) + ballRow;
-				//println("ballX="+ ballX + " ballCol= " + ballCol + " ballY="+ ballY + " ballRow= " + ballRow + " ballPos" + ballPos);
-				
-
-				// based on ball direction, check collisions horizontal
-
-				if (dirX < 0) { // if going left
-					// check if we are at the leftmost
-					if (ballCol >= 1) {
-						// check if the left adjacent detection grid is on
-						if (detectMap[ballPos - rows].life >98) {
-							// check if the left side of the ball touches right
-							// side that gridbox
-							 if (((ballX-(ballSize/2)) - (detectMap[ballPos - rows].x + videoScale)) <= ballSpeed/2 ){
-							//if (ballX - (ballSize / 2) == detectMap[ballPos - rows].x + videoScale) {
-								// reverse x direction
-								dirX = -dirX;
-								dirX*=bounceFactor;
-								dirY*=bounceFactor;
-							}
-						}
-					}
-				} else { // it's going right, check gridbox on the right
-					// check if we are at the rightmost
-					if (ballCol <= cols - 2) {
-						// check if the right adjacent box is on
-						if (detectMap[ballPos + rows].life >98) {
-							// check if the right side of the ball touches left
-							// side that gridbox
-							if ( detectMap[ballPos + rows].x - (ballX + (ballSize/2))  <= ballSpeed/2 ){
-							//if (ballX + (ballSize / 2) == detectMap[ballPos + rows].x) {
-								// reverse x direction
-								dirX = -dirX;
-								dirX*=bounceFactor;
-								dirY*=bounceFactor;
-							}
-						}
-					}
-				}
-
-				// based on ball direction, check collisions vertical
-
-				if (dirY > 0) { // if the ball is going down (increasing y)
-					// check if we are at the bottom
-					if (ballRow <= rows - 2) {
-						// check if the gridbox under is on
-						if (detectMap[ballPos + 1].life > 98) {
-
-							// check if the bottom of the ball touches the top
-							// of that gridbox
-							 if ( (detectMap[ballPos + 1].y - (ballY+(ballSize/2)) ) <= ballSpeed/2 ){
-							//if (ballY + (ballSize / 2) == detectMap[ballPos + 1].y) {
-								// reverse y direction
-								dirY = -dirY;
-								dirX*=bounceFactor;
-								dirY*=bounceFactor;
-							}
-						}
-					}
-				} else { // ball is going up (decreasing y)
-					// check if we are at the top
-					if (ballRow >= 1) {
-						// check if the gridbox under is on
-						if (detectMap[ballPos - 1].life > 98) {
-							// check if the top side of the ball touches the
-							// bottom of that gridbox
-							 if ( ((ballY - (ballSize/2)) - (detectMap[ballPos - 1].y + videoScale) ) <= ballSpeed/2  ){
-							//if (ballY - (ballSize / 2) == detectMap[ballPos - 1].y) {
-								// reverse y direction
-								dirY = -dirY;
-								dirX*=bounceFactor;
-								dirY*=bounceFactor;
-							}
-						}
-					}
-				}
-
-			}
-
-			// set rectangle mode back to default
-			rectMode(CORNER);
+			halfPongHandler();
 
 			break;
 		}
 	}
 
-	public void keyReleased() {
-		if (key == CODED) {
-			if (keyCode == UP) {
-				videoScale = videoScale * 2;
-				flock.killAll();
-				resetDetectMap();
-			} else if (keyCode == DOWN) {
-				if (videoScale > 2) {
-					videoScale = videoScale / 2;
-					flock.killAll();
-					resetDetectMap();
+	private void dotsHandler() {
+		// circles size depends on trackCount
+		// iterate through detectMap
+		for (int i = 0; i < (cols * rows); i++) {
+			// draw circles, size depends on detection count, gridsize and lifecount
+			if (detectMap[i].life > 10) {
+				stroke(detectMap[i].pointColor);
+
+				fill(trackColor, 100);
+
+				float cSize = map((detectMap[i].life * detectMap[i].count),
+						0, (videoScale * videoScale * lifeSpan), 0,
+						videoScale);
+				ellipse(detectMap[i].x + videoScale / 2, detectMap[i].y
+						+ videoScale / 2, cSize, cSize);
+			}
+		}
+	}
+
+	private void swarmHandler() {
+		// generates a swarm of boids, new boid in a specific grid point
+		// only after lifetime has elapsed
+		for (int i = 0; i < (cols * rows); i++) {
+			// Boids generation
+			if (detectMap[i].bump) {
+				flock.addBoid(new Boid(this, detectMap[i].x +videoScale/2,
+						detectMap[i].y+ +videoScale/2, detectMap[i].life,
+						detectMap[i].count / videoScale,
+						detectMap[i].pointColor));
+				detectMap[i].bump = false;
+			}
+		}
+
+		// run the flock simply attracted by itself
+		// flock.run();
+		
+		// run the flock, attracted by mouse
+		//flock.runMouse(new PVector(mouseX, mouseY));
+		
+// run the flock based on grid attraction
+		 flock.runGrid(detectMap);
+	}
+
+	private void halfPongHandler() {
+		// automatic ball, bounces off any detected grid
+		// display score
+		fill(trackColor);
+		textSize(40);
+		text((int)scoreL + " - " + (int)scoreR, (width / 2) - 40, 60);
+
+		if (scored > 0) {
+			if (scoreDelay > 0) {
+				fill(trackColor);
+				textSize(40);
+
+				text("SCORED", scored * (width / 3) - 50, (height / 2) + 20);
+				scoreDelay--;
+			} else {
+				scored = 0;
+				ballX = width / 2;
+				ballY = height / 2;
+				dirX*=bounceFactor*bounceFactor;
+				dirY*=bounceFactor*bounceFactor;
+			}
+		} else {
+
+			
+			// update ball position
+			ballY += dirY;
+			ballX += dirX;
+			// create the ball
+			rectMode(CENTER);
+			fill(trackColor);
+			rect(ballX, ballY, ballSize, ballSize);
+
+			// account for score
+			if (ballX <= 0) {
+				// if the the ball exits left then add one to the right score
+				// players score
+				scoreR++;
+				scored = 2;
+				scoreDelay = scoreTime;
+				// limit x values (for other checkings)
+				ballX=0;
+			}
+			if (ballX >= width) {
+				// if the the ball exits right then add one to the left score
+				// players score
+				scoreL++;
+				scored = 1;
+				scoreDelay = scoreTime;
+				// limit x values (for other checkings)
+				ballX=width-1;
+			}				
+			
+			// bounce off the top and bottom walls
+			if (ballY >= height-(ballSize/2)) {
+				dirY = -dirY;
+				dirX*=bounceFactor;
+				dirY*=bounceFactor;
+				
+				ballY = height-(ballSize/2);
+			}
+			if (ballY <= ballSize/2) {
+				dirY = -dirY;
+				dirX*=bounceFactor;
+				dirY*=bounceFactor;
+				
+				ballY = ballSize/2;
+			}
+
+			// check grid detection collisions
+			// calculate grid position of ball
+			ballCol = (int)ballX / videoScale;
+			ballRow = (int)ballY / videoScale;
+			ballPos = (ballCol * rows) + ballRow;
+			//println("ballX="+ ballX + " ballCol= " + ballCol + " ballY="+ ballY + " ballRow= " + ballRow + " ballPos" + ballPos);
+			
+
+			// based on ball direction, check collisions horizontal
+
+			if (dirX < 0) { // if going left
+				// check if we are at the leftmost
+				if (ballCol >= 1) {
+					// check if the left adjacent detection grid is on
+					if (detectMap[ballPos - rows].life >98) {
+						// check if the left side of the ball touches right
+						// side that gridbox
+						 if (((ballX-(ballSize/2)) - (detectMap[ballPos - rows].x + videoScale)) <= ballSpeed/2 ){
+						//if (ballX - (ballSize / 2) == detectMap[ballPos - rows].x + videoScale) {
+							// reverse x direction
+							dirX = -dirX;
+							dirX*=bounceFactor;
+							dirY*=bounceFactor;
+						}
+					}
+				}
+			} else { // it's going right, check gridbox on the right
+				// check if we are at the rightmost
+				if (ballCol <= cols - 2) {
+					// check if the right adjacent box is on
+					if (detectMap[ballPos + rows].life >98) {
+						// check if the right side of the ball touches left
+						// side that gridbox
+						if ( detectMap[ballPos + rows].x - (ballX + (ballSize/2))  <= ballSpeed/2 ){
+						//if (ballX + (ballSize / 2) == detectMap[ballPos + rows].x) {
+							// reverse x direction
+							dirX = -dirX;
+							dirX*=bounceFactor;
+							dirY*=bounceFactor;
+						}
+					}
 				}
 			}
 
-		} else if (key == 'b') {
+			// based on ball direction, check collisions vertical
+
+			if (dirY > 0) { // if the ball is going down (increasing y)
+				// check if we are at the bottom
+				if (ballRow <= rows - 2) {
+					// check if the gridbox under is on
+					if (detectMap[ballPos + 1].life > 98) {
+
+						// check if the bottom of the ball touches the top
+						// of that gridbox
+						 if ( (detectMap[ballPos + 1].y - (ballY+(ballSize/2)) ) <= ballSpeed/2 ){
+						//if (ballY + (ballSize / 2) == detectMap[ballPos + 1].y) {
+							// reverse y direction
+							dirY = -dirY;
+							dirX*=bounceFactor;
+							dirY*=bounceFactor;
+						}
+					}
+				}
+			} else { // ball is going up (decreasing y)
+				// check if we are at the top
+				if (ballRow >= 1) {
+					// check if the gridbox under is on
+					if (detectMap[ballPos - 1].life > 98) {
+						// check if the top side of the ball touches the
+						// bottom of that gridbox
+						 if ( ((ballY - (ballSize/2)) - (detectMap[ballPos - 1].y + videoScale) ) <= ballSpeed/2  ){
+						//if (ballY - (ballSize / 2) == detectMap[ballPos - 1].y) {
+							// reverse y direction
+							dirY = -dirY;
+							dirX*=bounceFactor;
+							dirY*=bounceFactor;
+						}
+					}
+				}
+			}
+
+		}
+
+		// set rectangle mode back to default
+		rectMode(CORNER);
+	}
+
+	private void simplePongHandler() {
+		// automatic ball, bat position depends on number of detected grid
+		// points in half the screen.
+
+		rectMode(CENTER);
+		// count number of detection boxes in the right side of the screen
+		rightCount = 0;
+		for (int c = (cols / 2); c < cols; c++) {
+			for (int r = 0; r < rows; r++) {
+				if (detectMap[c * rows + r].life > 98) {
+					rightCount++;
+				}
+			}
+		}
+		rightBatY = map(rightCount, 0, (cols * rows) / 3, 0, height);
+
+		// draw a 10 x 80 rectangle 10 pixels away from the right of the
+		// screen, in a position relative to the number of gridboxes in the
+		// right half of the screen
+		stroke(trackColor,100);
+		fill(trackColor,70);
+		
+		//rightBatY=mouseY;
+		rect(width - 10, rightBatY, 10, 80);
+
+		// count number of detection boxes in the left side of the screen
+		leftCount = 0;
+		for (int c = 0; c < (cols / 2); c++) {
+			for (int r = 0; r < rows; r++) {
+				if (detectMap[c * rows + r].life > 98) {
+					leftCount++;
+				}
+			}
+		}
+		leftBatY = map(leftCount, 0, (cols * rows) / 3, 0, height);
+		// draw a 10 x 80 rectangle 10 pixels away from the left of the
+		// screen, in a position relative to the number of gridboxes in the
+		// left half of the screen
+		//leftBatY=mouseY;
+		rect(10, leftBatY, 10, 80);
+
+
+		// display score
+		fill(trackColor);
+		textSize(40);
+		text((int)scoreL + " - " + (int)scoreR, (width / 2) - 40, 60);
+
+		if (scored > 0) {
+			if (scoreDelay > 0) {
+				fill(trackColor);
+				textSize(40);
+
+				text("SCORED", scored * (width / 3) - 50, (height / 2) + 20);
+				scoreDelay--;
+			} else {
+				scored = 0;
+			}
+		} else {
+
+			// update ball position
+			ballY += dirY;
+			ballX += dirX;
+			// create the ball
+			fill(trackColor);
+			rect(ballX, ballY, ballSize, ballSize);
+
+			// bounce off the top and bottom walls
+			if (ballY >= height-(ballSize/2)) {
+				dirY = -dirY;
+				dirX*=bounceFactor;
+				dirY*=bounceFactor;
+				
+				ballY = height-(ballSize/2);
+			}
+			if (ballY <= ballSize/2) {
+				dirY = -dirY;
+				dirX*=bounceFactor;
+				dirY*=bounceFactor;
+				
+				ballY = ballSize/2;
+			}
+
+			// bounce of the left Bat
+			if (ballX <= ballSize && ballY <= (leftBatY + 40) && ballY >= leftBatY - 40) {
+				// if its less than center make it go upwards
+				if (ballY < leftBatY) {
+					dirX = -dirX;
+					dirY = -dirY;
+				}
+				// if its more than center make it go downwards
+				if (ballY > leftBatY) {
+					dirX = -dirX;
+					dirY = +dirY;
+				}
+				// if its dead on make it shoot dead on
+				if (ballY == leftBatY) {
+					dirX = -dirY;
+					dirY = 0;
+				}
+				dirX*=bounceFactor;
+				dirY*=bounceFactor;
+			}
+			// bounce off the right Bat
+			if (ballX >= width - ballSize && ballY <= rightBatY + 40
+					&& ballY >= rightBatY - 40) {
+				// if its less than center make it go upwards
+				if (ballY < rightBatY) {
+					dirX = -dirX;
+					dirY = -dirY;
+				}
+				// if its more than center make it go downwards
+				if (ballY > rightBatY) {
+					dirX = -dirX;
+					dirY = +dirY;
+				}
+				// if its dead on make it shoot dead on
+				if (ballY == rightBatY) {
+					dirX = -dirX;
+					dirY = 0;
+				}
+				dirX*=bounceFactor;
+				dirY*=bounceFactor;
+			}
+			// account for score
+			if (ballX < 0) {
+				// if the left paddle doesn't hit the ball then add one to
+				// the right players score
+				scoreR++;
+
+				ballX = width / 2;
+				ballY = height / 2;
+				scored = 2;
+				scoreDelay = scoreTime;
+
+			}
+			if (ballX > width) {
+				// if the right paddle doesn't hit the ball then add one to
+				// the left players score
+				scoreL++;
+
+				ballX = width / 2;
+				ballY = height / 2;
+				scored = 1;
+				scoreDelay = scoreTime;
+
+			}
+		}
+
+		// set rectangle mode back to default
+		rectMode(CORNER);
+	}
+
+	public void keyReleased() {
+		
+		switch (key){
+		case CODED:
+			switch (keyCode){
+				case UP:
+					videoScale = videoScale * 2;
+					flock.killAll();
+					resetDetectMap();
+					break;
+				case DOWN:
+					if (videoScale > 2) {
+						videoScale = videoScale / 2;
+						flock.killAll();
+						resetDetectMap();
+					}
+			}
+			break;
+			
+		case 'b':
 			blankToggle = !blankToggle;
+			((Toggle)settingsFrame.settingsCP5.getController("blankToggle")).setState(blankToggle);
 			println("blankToggle=" + blankToggle);
-		} else if (key == 'd') {
+			break;
+		case 'd':
 			debugToggle= (debugToggle+1) % 3;
+			settingsFrame.settingsCP5.getController("debugToggle").setValue(debugToggle);
 			println("debugToggle=" + debugToggle);
-		} else if (key == 'g') {
+			break;
+		case 'g':
 			gridToggle = !gridToggle;
+			((Toggle)settingsFrame.settingsCP5.getController("gridToggle")).setState(gridToggle);
 			println("gridToggle=" + gridToggle);
-		} else if (key == 'b') {
-			trackColor = color(255, 221, 0);
-		} else if (key == 'c') {
+			break;
+		case 'c':
+			colorMode=!colorMode;
 			colorMode = !colorMode;
+			((Toggle)settingsFrame.settingsCP5.getController("colorMode")).setState(colorMode);
 			if (colorMode) {
 				limit = 20;
 				println("RGB(" + limit + ")");
@@ -634,40 +670,48 @@ public class Mirror extends PApplet {
 				limit = 10;
 				println("HSB (" + limit + ")");
 			}
-		} else if (key == '1') {
+			break;
+		case '1':
 			displayMode = states.squares;
 			println("display mode= " + displayMode);
 			println("squares of tracking color on video");
-		} else if (key == '2') {
+			break;
+		case '2':
 			displayMode = states.dots;
 			println("display mode= " + displayMode);
 			println("circles related to tracking color on video");
-		} else if (key == '3') {
+			break;
+		case '3':
 			displayMode = states.swarm;
 			gridToggle=true;
 			blankToggle=true;
 			debugToggle=0;
 			println("display mode= " + displayMode);
-		} else if (key == '4') {
+			break;
+		case '4':
 			displayMode = states.simplePong;
 			resetPong();
 			gridToggle = false;
 			debugToggle=0;
 			println("display mode= " + displayMode);
-		} else if (key == '5') {
+			break;
+		case '5':
 			displayMode = states.halfPong;
 			resetPong();
 			gridToggle = true;
 			debugToggle=0;
-			println("display mode= " + displayMode
-					+ " (t will toggle black background)");
-		} else if (key == '+') {
+			println("display mode= " + displayMode);
+			break;
+		case '+':
 			limit += 1;
 			println("limit= " + limit);
-		} else if (key == '0') {
+			break;
+		case '0':
 			limit -= 1;
 			println("limit= " + limit);
-		} else if (key == 'h') {
+			break;
+			
+		case 'h':
 			println("keys:");
 			println("h : this list");
 			println("1 : display modes: 1-squares; 2-circles; 3-flock ; 4-bat pong ; 5- grid pong");
@@ -683,9 +727,105 @@ public class Mirror extends PApplet {
 			println("0 : decrease color distance for positive color detection (limit) = "
 					+ limit);
 			println("+ : increase color distance for positive color detection (limit)");
+			break;
+			
+			default:
+				break;
+			
 		}
-
-	}
+			
+		}
+		
+		
+//		if (key == CODED) {
+//			if (keyCode == UP) {
+//				videoScale = videoScale * 2;
+//				flock.killAll();
+//				resetDetectMap();
+//			} else if (keyCode == DOWN) {
+//				if (videoScale > 2) {
+//					videoScale = videoScale / 2;
+//					flock.killAll();
+//					resetDetectMap();
+//				}
+//			}
+//
+//		} else if (key == 'b') {
+//			blankToggle = !blankToggle;
+//			((Toggle)settingsFrame.settingsCP5.getController("blankToggle")).setState(blankToggle);
+//			println("blankToggle=" + blankToggle);
+//		} else if (key == 'd') {
+//			debugToggle= (debugToggle+1) % 3;
+//			settingsFrame.settingsCP5.getController("debugToggle").setValue(debugToggle);
+//			println("debugToggle=" + debugToggle);
+//		} else if (key == 'g') {
+//			gridToggle = !gridToggle;
+//			((Toggle)settingsFrame.settingsCP5.getController("gridToggle")).setState(gridToggle);
+//			println("gridToggle=" + gridToggle);
+//		} else if (key == 'b') {
+//			trackColor = color(255, 221, 0);
+//		} else if (key == 'c') {
+//			colorMode = !colorMode;
+//			((Toggle)settingsFrame.settingsCP5.getController("colorMode")).setState(colorMode);
+//			if (colorMode) {
+//				limit = 20;
+//				println("RGB(" + limit + ")");
+//			} else {
+//				limit = 10;
+//				println("HSB (" + limit + ")");
+//			}
+//		} else if (key == '1') {
+//			displayMode = states.squares;
+//			println("display mode= " + displayMode);
+//			println("squares of tracking color on video");
+//		} else if (key == '2') {
+//			displayMode = states.dots;
+//			println("display mode= " + displayMode);
+//			println("circles related to tracking color on video");
+//		} else if (key == '3') {
+//			displayMode = states.swarm;
+//			gridToggle=true;
+//			blankToggle=true;
+//			debugToggle=0;
+//			println("display mode= " + displayMode);
+//		} else if (key == '4') {
+//			displayMode = states.simplePong;
+//			resetPong();
+//			gridToggle = false;
+//			debugToggle=0;
+//			println("display mode= " + displayMode);
+//		} else if (key == '5') {
+//			displayMode = states.halfPong;
+//			resetPong();
+//			gridToggle = true;
+//			debugToggle=0;
+//			println("display mode= " + displayMode);
+//			
+//		} else if (key == '+') {
+//			limit += 1;
+//			println("limit= " + limit);
+//		} else if (key == '0') {
+//			limit -= 1;
+//			println("limit= " + limit);
+//		} else if (key == 'h') {
+//			println("keys:");
+//			println("h : this list");
+//			println("1 : display modes: 1-squares; 2-circles; 3-flock ; 4-bat pong ; 5- grid pong");
+//			println("b : toggle blanking= " + debugToggle);
+//			println("d : toggle debug (various)= " + debugToggle);
+//			println("g : toggle detection grid= " + gridToggle);
+//					
+//			println("c : toggle color-mode between RGB (20) to HSB (40) and reset limit to value (n)");
+//			println("arrow up: bigger squares, videoScale= " + videoScale);
+//			println("arrow dwn: smaller squares");
+//			println("mouse click : selects color for detection= " + trackColor);
+//			println("b : default color selected (yellow-ish)");
+//			println("0 : decrease color distance for positive color detection (limit) = "
+//					+ limit);
+//			println("+ : increase color distance for positive color detection (limit)");
+//		}
+//
+//	}
 
 	private void resetDetectMap() {
 
@@ -700,11 +840,16 @@ public class Mirror extends PApplet {
 			detectMap[i] = new Point(this);
 			detectMap[i].pointColor = color(180 + map((i / cols), 0, rows, -180, 180),80, 90);
 		}
+		resetFlock(flockSize);
 
+	}
+	
+	public void resetFlock(int theSize){
 		// generate a new flock
-		flock = new Flock(50);
-		flock.maxBoids = 50;
+		flock = new Flock(theSize);
+		flock.maxBoids = theSize;
 		println("flock reset to size " + flock.maxBoids);
+		
 	}
 
 	private void resetPong() {
@@ -733,7 +878,17 @@ public class Mirror extends PApplet {
 		super.exit();
 	}
 	
-
+	ControlFrame addControlFrame(String theName, int theWidth, int theHeight) {
+		  Frame f = new Frame(theName);
+		  ControlFrame p = new ControlFrame(this, theWidth, theHeight);
+		  f.add(p);
+		  p.init();
+		  f.setTitle(theName);
+		  f.setSize(p.w, p.h);
+		  f.setLocation(100, 100);
+		  f.setResizable(false);
+		  f.setVisible(true);
+		  return p;
 	
-	
+	}
 }
